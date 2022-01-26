@@ -6248,6 +6248,7 @@ dependencies = [
  "assert_matches",
  "bitvec",
  "derive_more",
+ "fatality",
  "futures 0.3.18",
  "kvdb",
  "kvdb-memorydb",
@@ -6270,6 +6271,7 @@ name = "polkadot-node-core-parachains-inherent"
 version = "0.9.13"
 dependencies = [
  "async-trait",
+ "fatality",
  "futures 0.3.18",
  "futures-timer 3.0.2",
  "polkadot-node-subsystem",

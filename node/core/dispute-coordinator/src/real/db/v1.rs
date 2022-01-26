@@ -29,7 +29,7 @@ use parity_scale_codec::{Decode, Encode};
 
 use crate::real::{
 	backend::{Backend, BackendWriteOp, OverlayedBackend},
-	error::{Fatal, FatalResult},
+	error::{FatalError, FatalResult},
 	status::DisputeStatus,
 	DISPUTE_WINDOW,
 };
@@ -97,7 +97,7 @@ impl Backend for DbBackend {
 			}
 		}
 
-		self.inner.write(tx).map_err(Fatal::DbWriteFailed)
+		self.inner.write(tx).map_err(FatalError::DbWriteFailed)
 	}
 }
 

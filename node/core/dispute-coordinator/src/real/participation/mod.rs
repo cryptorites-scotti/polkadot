@@ -32,7 +32,7 @@ use polkadot_primitives::v1::{BlockNumber, CandidateHash, CandidateReceipt, Hash
 use crate::real::LOG_TARGET;
 
 use super::{
-	error::{Fatal, FatalResult, NonFatal, Result},
+	error::{FatalError, FatalResult, JfyiError, Result},
 	ordering::CandidateComparator,
 };
 
@@ -161,7 +161,7 @@ impl Participation {
 			}
 		}
 		// Out of capacity/no recent block yet - queue:
-		Ok(self.queue.queue(comparator, req).map_err(NonFatal::QueueError)?)
+		Ok(self.queue.queue(comparator, req).map_err(JfyiError::QueueError)?)
 	}
 
 	/// Message from a worker task was received - get the outcome.

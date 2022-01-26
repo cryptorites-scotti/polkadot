@@ -59,14 +59,14 @@ impl SpamSlots {
 		let mut slots: HashMap<(SessionIndex, ValidatorIndex), SpamCount> = HashMap::new();
 		for ((session, _), validators) in unconfirmed_disputes.iter() {
 			for validator in validators {
-				let e = slots.entry((*session, *validator)).or_default();
-				*e += 1;
-				if *e > MAX_SPAM_VOTES {
+				let spam_vote_count = slots.entry((*session, *validator)).or_default();
+				*spam_vote_count += 1;
+				if *spam_vote_count > MAX_SPAM_VOTES {
 					tracing::debug!(
 						target: LOG_TARGET,
 						?session,
 						?validator,
-						count = ?e,
+						count = ?spam_vote_count,
 						"Import exceeded spam slot for validator"
 					);
 				}
@@ -83,14 +83,14 @@ impl SpamSlots {
 		candidate: CandidateHash,
 		validator: ValidatorIndex,
 	) -> bool {
-		let c = self.slots.entry((session, validator)).or_default();
-		if *c >= MAX_SPAM_VOTES {
+		let spam_vote_count = self.slots.entry((session, validator)).or_default();
+		if *spam_vote_count >= MAX_SPAM_VOTES {
 			return false
 		}
 		let validators = self.unconfirmed.entry((session, candidate)).or_default();
 
 		if validators.insert(validator) {
-			*c += 1;
+			*spam_vote_count += 1;
 			true
 		} else {
 			false
@@ -106,8 +106,8 @@ impl SpamSlots {
 		if let Some(validators) = self.unconfirmed.remove(key) {
 			let (session, _) = key;
 			for validator in validators {
-				if let Some(c) = self.slots.remove(&(*session, validator)) {
-					let new = c - 1;
+				if let Some(spam_vote_count) = self.slots.remove(&(*session, validator)) {
+					let new = spam_vote_count - 1;
 					if new > 0 {
 						self.slots.insert((*session, validator), new);
 					}

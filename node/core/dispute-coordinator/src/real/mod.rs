@@ -46,7 +46,7 @@ use db::v1::DbBackend;
 use error::{FatalResult, Result};
 
 use self::{
-	error::{Error, NonFatal},
+	error::{Error, JfyiError},
 	ordering::CandidateComparator,
 	participation::ParticipationRequest,
 	spam_slots::{SpamSlots, UnconfirmedDisputes},
@@ -194,18 +194,18 @@ impl DisputeCoordinatorSubsystem {
 		B: Backend + 'static,
 	{
 		loop {
-			let (first_leaf, rolling_session_window) = match get_rolling_session_window(ctx).await {
-				Ok(Some(update)) => update,
-				Ok(None) => {
-					tracing::info!(target: LOG_TARGET, "received `Conclude` signal, exiting");
-					return Ok(None)
-				},
-				Err(Error::Fatal(f)) => return Err(f),
-				Err(Error::NonFatal(e)) => {
-					e.log();
-					continue
-				},
-			};
+			let (first_leaf, rolling_session_window) =
+				match get_rolling_session_window(ctx).await.into_nested() {
+					Ok(Some(update)) => update,
+					Ok(None) => {
+						tracing::info!(target: LOG_TARGET, "received `Conclude` signal, exiting");
+						return Ok(None)
+					},
+					Err(e) => {
+						e.split()?.log();
+						continue
+					},
+				};
 
 			let mut overlay_db = OverlayedBackend::new(&mut backend);
 			let (participations, spam_slots, ordering_provider) = match self
@@ -219,9 +219,8 @@ impl DisputeCoordinatorSubsystem {
 				.await
 			{
 				Ok(v) => v,
-				Err(Error::Fatal(f)) => return Err(f),
-				Err(Error::NonFatal(e)) => {
-					e.log();
+				Err(e) => {
+					e.split()?.log();
 					continue
 				},
 			};
@@ -371,7 +370,7 @@ where
 			leaf.clone(),
 			RollingSessionWindow::new(ctx, DISPUTE_WINDOW, leaf.hash)
 				.await
-				.map_err(NonFatal::RollingSessionWindow)?,
+				.map_err(JfyiError::RollingSessionWindow)?,
 		)))
 	} else {
 		Ok(None)

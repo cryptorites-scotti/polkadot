@@ -26,76 +26,44 @@ use polkadot_node_subsystem_util::{rolling_session_window::SessionsUnavailable, 
 use super::{db, participation};
 use crate::real::{CodecError, LOG_TARGET};
 
-/// Errors for this subsystem.
-#[derive(Debug, Error)]
-#[error(transparent)]
+#[fatality(splitable)]
 pub enum Error {
-	/// All fatal errors.
-	Fatal(#[from] Fatal),
-	/// All nonfatal/potentially recoverable errors.
-	NonFatal(#[from] NonFatal),
-}
-
-/// General `Result` type for dispute coordinator.
-pub type Result<R> = std::result::Result<R, Error>;
-/// Result type with only fatal errors.
-pub type FatalResult<R> = std::result::Result<R, Fatal>;
-/// Result type with only non fatal errors.
-pub type NonFatalResult<R> = std::result::Result<R, NonFatal>;
-
-impl From<runtime::Error> for Error {
-	fn from(o: runtime::Error) -> Self {
-		match o {
-			runtime::Error::Fatal(f) => Self::Fatal(Fatal::Runtime(f)),
-			runtime::Error::NonFatal(f) => Self::NonFatal(NonFatal::Runtime(f)),
-		}
-	}
-}
-
-impl From<SubsystemError> for Error {
-	fn from(o: SubsystemError) -> Self {
-		match o {
-			SubsystemError::Context(msg) => Self::Fatal(Fatal::SubsystemContext(msg)),
-			_ => Self::NonFatal(NonFatal::Subsystem(o)),
-		}
-	}
-}
-
-/// Fatal errors of this subsystem.
-#[derive(Debug, Error)]
-pub enum Fatal {
 	/// Errors coming from runtime::Runtime.
+	#[fatal]
 	#[error("Error while accessing runtime information {0}")]
 	Runtime(#[from] runtime::Fatal),
 
 	/// We received a legacy `SubystemError::Context` error which is considered fatal.
+	#[fatal]
 	#[error("SubsystemError::Context error: {0}")]
 	SubsystemContext(String),
 
 	/// `ctx.spawn` failed with an error.
+	#[fatal]
 	#[error("Spawning a task failed: {0}")]
 	SpawnFailed(SubsystemError),
 
+	#[fatal]
 	#[error("Participation worker receiver exhausted.")]
 	ParticipationWorkerReceiverExhausted,
 
 	/// Receiving subsystem message from overseer failed.
+	#[fatal]
 	#[error("Receiving message from overseer failed: {0}")]
 	SubsystemReceive(#[source] SubsystemError),
 
+	#[fatal]
 	#[error("Writing to database failed: {0}")]
 	DbWriteFailed(std::io::Error),
 
+	#[fatal]
 	#[error("Oneshow for receiving block number from chain API got cancelled")]
 	CanceledBlockNumber,
 
+	#[fatal]
 	#[error("Retrieving block number from chain API failed with error: {0}")]
 	ChainApiBlockNumber(ChainApiError),
-}
 
-#[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
-pub enum NonFatal {
 	#[error(transparent)]
 	RuntimeApi(#[from] RuntimeApiError),
 
@@ -129,11 +97,18 @@ pub enum NonFatal {
 	QueueError(#[from] participation::QueueError),
 }
 
+/// General `Result` type for dispute coordinator.
+pub type Result<R> = std::result::Result<R, Error>;
+/// Result type with only fatal errors.
+pub type FatalResult<R> = std::result::Result<R, FatalError>;
+/// Result type with only non fatal errors.
+pub type JfyiResult<R> = std::result::Result<R, JfyiError>;
+
 impl From<db::v1::Error> for Error {
 	fn from(err: db::v1::Error) -> Self {
 		match err {
-			db::v1::Error::Io(io) => Self::NonFatal(NonFatal::Io(io)),
-			db::v1::Error::Codec(e) => Self::NonFatal(NonFatal::Codec(e)),
+			db::v1::Error::Io(io) => Self::from(JfyiError::Io(io)),
+			db::v1::Error::Codec(e) => Self::from(JfyiError::Codec(e)),
 		}
 	}
 }
@@ -142,18 +117,17 @@ impl From<db::v1::Error> for Error {
 ///
 /// We basically always want to try and continue on error. This utility function is meant to
 /// consume top-level errors by simply logging them
-pub fn log_error(result: Result<()>) -> std::result::Result<(), Fatal> {
-	match result {
-		Err(Error::Fatal(f)) => Err(f),
-		Err(Error::NonFatal(error)) => {
-			error.log();
+pub fn log_error(result: Result<()>) -> std::result::Result<(), FatalError> {
+	match result.into_nested()? {
+		Ok(()) => Ok(()),
+		Err(jfyi) => {
+			jfyi.log();
 			Ok(())
 		},
-		Ok(()) => Ok(()),
 	}
 }
 
-impl NonFatal {
+impl JfyiError {
 	/// Log a `NonFatal`.
 	pub fn log(self) {
 		match self {
